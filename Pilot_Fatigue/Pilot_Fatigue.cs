@@ -9,9 +9,8 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using HBS.Collections;
-using HBS.Extensions;
 using UnityEngine;
-
+using BattleTech.UI.Tooltips;
 
 namespace Pilot_Fatigue
 {
@@ -36,12 +35,44 @@ namespace Pilot_Fatigue
                 settings = new ModSettings();
             }
 
+            string logString = $@"Settings:
+ArgoUpgradeReduction: {settings.ArgoUpgradeReduction}            
+FatigueTimeStart: {settings.FatigueTimeStart}
+FatigueMinimum: {settings.FatigueMinimum}
+MoralePositiveTierOne: {settings.MoralePositiveTierOne}
+MoralePositiveTierTwo: {settings.MoralePositiveTierTwo}
+MoraleNegativeTierOne: {settings.MoraleNegativeTierOne}
+MoraleNegativeTierTwo: {settings.MoraleNegativeTierTwo}
+UseCumulativeDays: {settings.UseCumulativeDays}
+FatigueReducesSkills: {settings.FatigueReducesSkills}
+FatigueFactor: {settings.FatigueFactor}
+FatigueFactorIsPercent {settings.FatigueFactorIsPercent}
+InjuriesHurt: {settings.InjuriesHurt}
+InjuryFactorIsPercent {settings.InjuryReductionIsPercent}
+CanPilotInjured: {settings.CanPilotInjured}
+pilot_athletic_FatigueDaysReduction: {settings.pilot_athletic_FatigueDaysReduction}
+pilot_athletic_FatigueDaysReductionFactor: {settings.pilot_athletic_FatigueDaysReductionFactor}
+QuirksEnabled: {settings.QuirksEnabled}
+FatigueReducesResolve: {settings.FatigueReducesResolve}
+FatigueResolveFactor: {settings.FatigueResolveFactor}
+FatigueCausesLowSpirits: {settings.FatigueCausesLowSpirits}
+LowMoraleTime: {settings.LowMoraleTime}
+LightInjuriesOn: {settings.LightInjuriesOn}
+MaximumFatigueTime: {settings.MaximumFatigueTime}
+AllowNegativeResolve: {settings.AllowNegativeResolve}
+pilot_wealthy_extra_fatigue: {settings.pilot_wealthy_extra_fatigue}
+MechDamageMaxDays: {settings.MechDamageMaxDays}
+BEXCE: {settings.BEXCE}";
+
+            Helper.Logger.NewLog();
+            Helper.Logger.LogLine(logString);
+
             var harmony = HarmonyInstance.Create(ModId);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
 
         [HarmonyPatch(typeof(SGBarracksRosterList), "SetSorting")]
-        public static class SGBarracksRosterList_SetSorting_Patch
+        public static class SGBarracksRosterList_SetSorting_Postfix
         {
             private static readonly HashSet<RectTransform> AdjustedIcons = new HashSet<RectTransform>();
             private const float SizeDeltaFactor = 2;
@@ -54,16 +85,13 @@ namespace Pilot_Fatigue
                     var timeoutIcon = pilot.GetComponentsInChildren<RectTransform>(true)
                         .FirstOrDefault(x => x.name == "mw_TimeOutIcon");
                     if (timeoutIcon == null)
-                    {
                         return;
-                    }
 
                     if (!AdjustedIcons.Contains(timeoutIcon))
                     {
                         if (pilot.Pilot.pilotDef.PilotTags.Contains("pilot_fatigued"))
                         {
                             AdjustedIcons.Add(timeoutIcon);
-                            // mw_TimeOutIcon (SVGImporter.SVGImage)
                             timeoutIcon.sizeDelta /= SizeDeltaFactor;
                             timeoutIcon.anchoredPosition += AnchoredPositionOffset;
                         }
@@ -119,21 +147,15 @@ namespace Pilot_Fatigue
                 int MoraleModifier = 0;
 
                 if (MoraleDiff <= settings.MoraleNegativeTierTwo)
-                {
                     MoraleModifier = -2;
-                }
-                if (MoraleDiff <= settings.MoraleNegativeTierOne && MoraleDiff > settings.MoraleNegativeTierTwo)
-                {
+                else if (MoraleDiff <= settings.MoraleNegativeTierOne && MoraleDiff > settings.MoraleNegativeTierTwo)
                     MoraleModifier = -1;
-                }
-                if (MoraleDiff < settings.MoralePositiveTierTwo && MoraleDiff >= settings.MoralePositiveTierOne)
-                {
+                else if (MoraleDiff < settings.MoralePositiveTierTwo && MoraleDiff >= settings.MoralePositiveTierOne)
                     MoraleModifier = 1;
-                }
-                if (MoraleDiff >= settings.MoralePositiveTierTwo)
-                {
+                else if (MoraleDiff >= settings.MoralePositiveTierTwo)
                     MoraleModifier = 2;
-                }
+
+                Helper.Logger.LogLine($"current morale {simstate.Morale} starting morale {simstate.Constants.Story.StartingMorale} moarle diff is {MoraleDiff}\n");
 
                 //Reduction in Fatigue Time for Guts tiers.
                 int GutsReduction = 0;
@@ -154,12 +176,12 @@ namespace Pilot_Fatigue
 
                 if (simState != null && settings.ArgoUpgradeReduction)
                 {
-                    var shipUpgrades = Traverse.Create(simState).Field("shipUpgrades").GetValue < List<ShipModuleUpgrade>>();
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_hydroponics"))))
+                    var shipUpgrades = Traverse.Create(simState).Field("shipUpgrades").GetValue <List<ShipModuleUpgrade>>();
+                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argo_rec_hydroponics"))))
                         argoReduction++;
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_pool"))))
+                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argo_rec_pool"))))
                         argoReduction++;
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_arcade"))))
+                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argo_rec_arcade"))))
                         argoReduction++;
                 }
                 var rand = new System.Random();
@@ -168,6 +190,8 @@ namespace Pilot_Fatigue
                 //Calculate actual Fatigue Time for pilot.
                 int FatigueTime = FatigueTimeStart + MechDamageTime - GutsReduction - MoraleModifier - argoReduction;
 
+                Helper.Logger.LogLine($"Calculating Fatigue for {unitResult.pilot.Callsign}\n Fatigue Time({FatigueTime}) = Fatigue Time Start({FatigueTimeStart}) + Mech Damage Time({MechDamageTime}) - Pilot Guts Reduction({GutsReduction}) - Morale Modifier({MoraleModifier}) - Argo Upgrades Reduction({argoReduction})");
+
                 if (unitResult.pilot.pilotDef.PilotTags.Contains("pilot_athletic") && settings.QuirksEnabled)
                     FatigueTime = (int)Math.Ceiling(FatigueTime/settings.pilot_athletic_FatigueDaysReductionFactor) - settings.pilot_athletic_FatigueDaysReduction;
 
@@ -175,9 +199,7 @@ namespace Pilot_Fatigue
                     FatigueTime -= settings.pilot_athletic_FatigueDaysReduction;
 
                 if (FatigueTime < settings.FatigueMinimum)
-                {
                     FatigueTime = settings.FatigueMinimum;
-                }
 
                 if (settings.QuirksEnabled && unitResult.pilot.pilotDef.PilotTags.Contains("pilot_wealthy"))
                     FatigueTime += settings.pilot_wealthy_extra_fatigue;
@@ -195,7 +217,6 @@ namespace Pilot_Fatigue
                         GutCheck = GutCheck + 25;
                     if (unitResult.pilot.pilotDef.PilotTags.Contains("PQ_pilot_green"))
                         GutCheck = GutCheck + 25;
-
 
                     int currenttime = unitResult.pilot.pilotDef.TimeoutRemaining;
                     unitResult.pilot.pilotDef.SetTimeoutTime(0);
@@ -222,35 +243,32 @@ namespace Pilot_Fatigue
             }
         }
 
-
-        //[HarmonyPatch(typeof(SimGameState))]
-        //[HarmonyPatch("GetInjuryCost")]
-        //public static class GetInjuryCost_Postfix
-        //{
-        //    private static void Postfix(SimGameState __instance, Pilot p, ref int __result)
-        //    {
-        //        if (p.pilotDef.PilotTags.Contains("pilot_fatigued") | p.pilotDef.PilotTags.Contains("pilot_lightinjury") && p.pilotDef.TimeoutRemaining != 0)
-        //        {
-        //            __result = p.pilotDef.TimeoutRemaining;
-        //        }
-        //    }
-        //}
-
-
-
         [HarmonyPatch(typeof(Pilot))]
         [HarmonyPatch("CanPilot", MethodType.Getter)]
-        public static class BattleTech_Pilot_CanPilot_Prefix
+        public static class BattleTech_Pilot_CanPilot_Postfix
         {
             public static void Postfix(Pilot __instance, ref bool __result)
             {
                 if (__instance.Injuries == 0 && __instance.pilotDef.TimeoutRemaining > 0 && __instance.pilotDef.PilotTags.Contains("pilot_fatigued"))
-                {
                     __result = true;
+                else if (settings.InjuriesHurt && settings.CanPilotInjured && (__instance.Injuries > 0 || __instance.pilotDef.PilotTags.Contains("pilot_lightinjury")))
+                {
+                    double InjuryCount = __instance.Injuries;
+                    if (InjuryCount < 1 || __instance.pilotDef.PilotTags.Contains("pilot_lightinjury"))
+                        InjuryCount = 0.5;
+                    //allow injured pilots if InjuriesHurt is true and they meet requirements
+                    GameInstance battletechGame = UnityGameInstance.BattleTechGame;
+
+                    if (battletechGame == null || battletechGame.Simulation == null)
+                        return;
+
+                    //formula is that for every 3 medtechs, we can ignore an injury
+                    if (battletechGame.Simulation.MedTechSkill > 3)
+                        if ((battletechGame.Simulation.MedTechSkill / 3) >= InjuryCount)
+                            __result = true;
                 }
             }
         }
-        
 
         [HarmonyPatch(typeof(SimGameState), "OnDayPassed")]
         public static class CorrectTimeOut
@@ -262,21 +280,10 @@ namespace Pilot_Fatigue
                 for (int j = 0; j < list.Count; j++)
                 {
                     Pilot pilot = list[j];
-                    if (pilot.pilotDef.PilotTags.Contains("pilot_lightinjury") && pilot.Injuries == 0)
-                    {
-                        //pilot.StatCollection.ModifyStat<int>("Light Injury", 0, "Injuries", StatCollection.StatOperation.Set, 1, -1, true);
-                    }
-//                    if (pilot.pilotDef.TimeoutRemaining != 0)
-//                    {
-//                        int FatigueTime = pilot.pilotDef.TimeoutRemaining;
-//                        pilot.pilotDef.SetTimeoutTime(FatigueTime - 1);
-//                    }
-
                     if (pilot.pilotDef.TimeoutRemaining == 0 && pilot.pilotDef.PilotTags.Contains("pilot_fatigued"))
                     {
                         pilot.pilotDef.PilotTags.Remove("pilot_fatigued");
                     }
-
                     if (pilot.pilotDef.TimeoutRemaining == 0 && pilot.pilotDef.PilotTags.Contains("pilot_lightinjury"))
                     {
                         pilot.pilotDef.PilotTags.Remove("pilot_lightinjury");
@@ -354,13 +361,12 @@ namespace Pilot_Fatigue
         }
 
         //Make Fatigue reduce resolve. 
-
         [HarmonyPatch(typeof(Team), "CollectUnitBaseline")]
         public static class Resolve_Reduction_Patch
         {
             public static void Postfix(Team __instance, ref int __result)
             {
-                if (settings.FatigueReducesResolve == true)
+                if (settings.FatigueReducesResolve)
                 {
                     foreach (AbstractActor actor in __instance.units)
                     {
@@ -369,16 +375,24 @@ namespace Pilot_Fatigue
                         {
                             int TimeOut = pilot.pilotDef.TimeoutRemaining;
                             int Penalty = 0;
+                            if (settings.UseCumulativeDays)
+                            {
+                                GameInstance battletechGame = UnityGameInstance.BattleTechGame;
+                                if (battletechGame != null)
+                                    if (battletechGame.Simulation != null)
+                                    {
+                                        SimGameState sim = battletechGame.Simulation;
+                                        if (sim.MedBayQueue.SubEntryContainsID(pilot.Description.Id))
+                                            TimeOut = Mathf.Max(1, Mathf.CeilToInt((float)sim.MedBayQueue.GetSubEntry(pilot.Description.Id).GetRemainingCost() / sim.GetDailyHealValue()));
+                                    }
+                            }
 
                             if (pilot.pilotDef.PilotTags.Contains("pilot_gladiator") && settings.QuirksEnabled)
-                            {
                                 Penalty = (int)Math.Floor(TimeOut / settings.FatigueResolveFactor);
-                            }
                             else
-                            {
                                 Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueResolveFactor);
-                            }
-                            __result = __result - Penalty;
+
+                            __result -= Penalty;
                             if (!settings.AllowNegativeResolve && __result < 0)
                                 __result = 0;
                         }
@@ -388,12 +402,10 @@ namespace Pilot_Fatigue
         }
 
         //Fatigue applies Low Spirits
-
         [HarmonyPatch(typeof(TurnEventNotification), "ShowTeamNotification")]
         public static class TurnEventNotification_Patch
         {
-            public static void Prefix(TurnEventNotification __instance, Team team, bool ___hasBegunGame, 
-                CombatGameState ___Combat)
+            public static void Prefix(TurnEventNotification __instance, Team team, bool ___hasBegunGame, CombatGameState ___Combat)
             {
                 if (settings.FatigueCausesLowSpirits)
                 {
@@ -420,27 +432,63 @@ namespace Pilot_Fatigue
             public static void Postfix(Pilot __instance, ref int __result)
             {
                 int Penalty = 0;
-                int TimeOut = __instance.pilotDef.TimeoutRemaining;
-                if (__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills)
+                string LogString = "";
+                if ((__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills) || (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury") && settings.InjuriesHurt))
                 {
-                    if (__instance.pilotDef.PilotTags.Contains("pilot_gladiator") && settings.QuirksEnabled)
+                    LogString += $"Pilot {__instance.Callsign}\n";
+                    int TimeOut = __instance.pilotDef.TimeoutRemaining;
+                    if (settings.UseCumulativeDays)
                     {
-                        Penalty = (int)Math.Floor(TimeOut / settings.FatigueFactor);
+                        GameInstance battletechGame = UnityGameInstance.BattleTechGame;
+                        if (battletechGame != null)
+                            if (battletechGame.Simulation != null)
+                            {
+                                SimGameState sim = battletechGame.Simulation;
+                                if (sim.MedBayQueue.SubEntryContainsID(__instance.Description.Id))
+                                    TimeOut = Mathf.Max(1, Mathf.CeilToInt((float)sim.MedBayQueue.GetSubEntry(__instance.Description.Id).GetRemainingCost() / sim.GetDailyHealValue()));
+                            }
+                        LogString += $"Starting days = {__instance.pilotDef.TimeoutRemaining} Remaining Days = {TimeOut}\n";
+                    }
+                    if (settings.FatigueFactorIsPercent)
+                    {
+                        double reductionFactor = TimeOut * (settings.FatigueFactor / 100);
+                        if (__instance.pilotDef.PilotTags.Contains("pilot_gladiator") && settings.QuirksEnabled)
+                            Penalty = (int)Math.Floor(__result * reductionFactor);
+                        else
+                            Penalty = (int)Math.Ceiling(__result * reductionFactor);
+                        LogString += $"TimeOut is {TimeOut} FatigueFactor is {settings.FatigueFactor} ReductionFactor is {reductionFactor} for Penalty of {Penalty}\n";
                     }
                     else
                     {
-                        Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
+                        if (__instance.pilotDef.PilotTags.Contains("pilot_gladiator") && settings.QuirksEnabled)
+                            Penalty = (int)Math.Floor(TimeOut / settings.FatigueFactor);
+                        else
+                            Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
                     }
+                    if (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury"))
+                        Penalty = (int)Math.Ceiling(Penalty * 1.5);
                 }
 
-                if (settings.InjuriesHurt)
+                if (settings.InjuriesHurt && __instance.Injuries > 0)
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    if (settings.InjuryReductionIsPercent)
+                    {
+                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        Penalty += (int)Math.Ceiling(__result * ReductionFactor);
+                        LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
+                        LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
+                        Helper.Logger.LogLine(LogString);
+                    }
+                    else
+                        Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
                 if (NewValue < 1)
-                {
                     NewValue = 1;
+                if (Penalty > 0)
+                {
+                    LogString += $"Gunnery of {__result} reduced by penalty of {Penalty} for reduced rating of {NewValue}";
+                    //Helper.Logger.LogLine(LogString);
                 }
                 __result = NewValue;
             }
@@ -451,20 +499,56 @@ namespace Pilot_Fatigue
         {
             public static void Postfix(Pilot __instance, ref int __result)
             {
-                int TimeOut = __instance.pilotDef.TimeoutRemaining;
                 int Penalty = 0;
-                if (__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills)
-                    Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
-
-                if (settings.InjuriesHurt)
+                string LogString = "";
+                if ((__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills) || (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury") && settings.InjuriesHurt))
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    LogString += $"Pilot {__instance.Callsign}\n";
+                    int TimeOut = __instance.pilotDef.TimeoutRemaining;
+                    if (settings.UseCumulativeDays)
+                    {
+                        GameInstance battletechGame = UnityGameInstance.BattleTechGame;
+                        if (battletechGame != null)
+                            if (battletechGame.Simulation != null)
+                            {
+                                SimGameState sim = battletechGame.Simulation;
+                                if (sim.MedBayQueue.SubEntryContainsID(__instance.Description.Id))
+                                    TimeOut = Mathf.Max(1, Mathf.CeilToInt((float)sim.MedBayQueue.GetSubEntry(__instance.Description.Id).GetRemainingCost() / sim.GetDailyHealValue()));
+                            }
+                        LogString += $"Starting days = {__instance.pilotDef.TimeoutRemaining} Remaining Days = {TimeOut}\n";
+                    }
+                    if (settings.FatigueFactorIsPercent)
+                    {
+                        double reductionFactor = TimeOut * (settings.FatigueFactor / 100);
+                        Penalty = (int)Math.Ceiling(__result * reductionFactor);
+                        LogString += $"TimeOut is {TimeOut} FatigueFactor is {settings.FatigueFactor} ReductionFactor is {reductionFactor} for Penalty of {Penalty}\n";
+                    }
+                    else
+                        Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
+                    if (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury"))
+                        Penalty = (int)Math.Ceiling(Penalty * 1.5);
+                }
+
+                if (settings.InjuriesHurt && __instance.Injuries > 0)
+                {
+                    if (settings.InjuryReductionIsPercent)
+                    {
+                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        Penalty += (int)Math.Ceiling(__result * ReductionFactor);
+                        LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
+                        LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
+                        Helper.Logger.LogLine(LogString);
+                    }
+                    else
+                        Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
-
                 if (NewValue < 1)
-                {
                     NewValue = 1;
+                if (Penalty > 0)
+                {
+                    LogString += $"Piloting of {__result} reduced by penalty of {Penalty} for reduced rating of {NewValue}";
+                    //Helper.Logger.LogLine(LogString);
                 }
                 __result = NewValue;
             }
@@ -474,30 +558,70 @@ namespace Pilot_Fatigue
         [HarmonyPatch("Tactics", MethodType.Getter)]
         public class TacticsHealthModifier
         {
-
             public static void Postfix(Pilot __instance, ref int __result)
             {
-                int TimeOut = __instance.pilotDef.TimeoutRemaining;
                 int Penalty = 0;
-                if (__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills)
-                    Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
-
-                if (settings.InjuriesHurt)
+                string LogString = "";
+                if ((__instance.pilotDef.PilotTags.Contains("pilot_fatigued") && settings.FatigueReducesSkills) || (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury") && settings.InjuriesHurt))
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    LogString += $"Pilot {__instance.Callsign}\n";
+                    int TimeOut = __instance.pilotDef.TimeoutRemaining;
+                    if (settings.UseCumulativeDays)
+                    {
+                        GameInstance battletechGame = UnityGameInstance.BattleTechGame;
+                        if (battletechGame != null)
+                            if (battletechGame.Simulation != null)
+                            {
+                                SimGameState sim = battletechGame.Simulation;
+                                if (sim.MedBayQueue.SubEntryContainsID(__instance.Description.Id))
+                                    TimeOut = Mathf.Max(1, Mathf.CeilToInt((float)sim.MedBayQueue.GetSubEntry(__instance.Description.Id).GetRemainingCost() / sim.GetDailyHealValue()));
+                            }
+                        LogString += $"Starting days = {__instance.pilotDef.TimeoutRemaining} Remaining Days = {TimeOut}\n";
+                    }
+                    if (settings.FatigueFactorIsPercent)
+                    {
+                        double reductionFactor = TimeOut * (settings.FatigueFactor / 100);
+                        Penalty = (int)Math.Ceiling(__result * reductionFactor);
+                        LogString += $"TimeOut is {__instance.pilotDef.TimeoutRemaining} FatigueFactor is {settings.FatigueFactor} ReductionFactor is {reductionFactor} for Penalty of {Penalty}\n";
+                    }
+                    else
+                        Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueFactor);
+                    if (__instance.pilotDef.PilotTags.Contains("pilot_lightinjury"))
+                    {
+                        Penalty = (int)Math.Ceiling(Penalty * 1.5);
+                        LogString += $"Light Injury is Penalty {Penalty}\n";
+                        Helper.Logger.LogLine(LogString);
+                    }
+                }
+
+                if (settings.InjuriesHurt && __instance.Injuries > 0)
+                {
+                    if (settings.InjuryReductionIsPercent)
+                    {
+                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        Penalty += (int)Math.Ceiling(__result * ReductionFactor);
+                        LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
+                        LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
+                        Helper.Logger.LogLine(LogString);
+                    }
+                    else
+                        Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
                 if (NewValue < 1)
-                {
                     NewValue = 1;
+                if (Penalty > 0)
+                {
+                    LogString += $"Tactics of {__result} reduced by penalty of {Penalty} for reduced rating of {NewValue}";
+                    //Helper.Logger.LogLine(LogString);
                 }
                 __result = NewValue;
             }
         }
-        
-        //lock skills if they are reduced by fatigue or injury
+
+        //prevent skill up if skills are reduced by fatigue or injury
         [HarmonyPatch(typeof(SGBarracksAdvancementPanel), "SetPips")]
-        public static class SGBarracksAdvancementPanel_SetPips_prefix
+        public static class SGBarracksAdvancementPanel_SetPips_Prefix
         {
             //HarmonyPriority set to 100 to ensure prefix runs before Abilifier, because HarmonyBefore alone wasn't enough (likely due to Abilifier not having a HarmonyAfter annoation)
             [HarmonyPriority(100)]
@@ -512,27 +636,18 @@ namespace Pilot_Fatigue
             }
         }
 
-        public static class Helper
+    public static class Helper
         {
-            //public static Settings LoadSettings()
-            //{
-            //    Settings result;
-            //    try
-            //    {
-            //        using (StreamReader streamReader = new StreamReader("mods/Pilot_Fatigue/settings.json"))
-            //        {
-            //            result = JsonConvert.DeserializeObject<Settings>(streamReader.ReadToEnd());
-            //        }
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        Logger.LogError(ex);
-            //        result = null;
-            //    }
-            //    return result;
-            //}
             public class Logger
             {
+                public static void NewLog()
+                {
+                    string path = "mods/Pilot_Fatigue/Log.txt";
+                    using (StreamWriter streamWriter = new StreamWriter(path, false))
+                    {
+                        streamWriter.WriteLine("");
+                    }
+                }
                 public static void LogError(Exception ex)
                 {
                     using (StreamWriter streamWriter = new StreamWriter("mods/Pilot_Fatigue/Log.txt", true))
@@ -558,8 +673,9 @@ namespace Pilot_Fatigue
                     string path = "mods/Pilot_Fatigue/Log.txt";
                     using (StreamWriter streamWriter = new StreamWriter(path, true))
                     {
-                        streamWriter.WriteLine(line + Environment.NewLine + "Date :" + DateTime.Now.ToString());
-                        streamWriter.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
+                        streamWriter.WriteLine(DateTime.Now.ToString() + Environment.NewLine + line + Environment.NewLine);
+                        //streamWriter.WriteLine(line + Environment.NewLine + "Date :" + DateTime.Now.ToString());
+                        //streamWriter.WriteLine(Environment.NewLine + "-----------------------------------------------------------------------------" + Environment.NewLine);
                     }
                 }
             }
@@ -568,27 +684,30 @@ namespace Pilot_Fatigue
         {
             public bool ArgoUpgradeReduction = false;
             public int FatigueTimeStart = 7;
-            public int MoraleModifier = 5;
             public int FatigueMinimum = 0;
             public int MoralePositiveTierOne = 5;
             public int MoralePositiveTierTwo = 15;
             public int MoraleNegativeTierOne = -5;
             public int MoraleNegativeTierTwo = -15;
-            public double FatigueFactor = 2.5;
-            public bool InjuriesHurt = true;
-            public int pilot_athletic_FatigueDaysReduction = 1;
-            public double pilot_athletic_FatigueDaysReductionFactor = 0.5;
+            public bool UseCumulativeDays = true;
+            public bool FatigueReducesSkills = false;
+            public double FatigueFactor = 7.5;
+            public bool FatigueFactorIsPercent = true;
             public bool QuirksEnabled = false;
             public bool FatigueReducesResolve = true;
-            public bool FatigueReducesSkills = false;
             public double FatigueResolveFactor = 2.5;
             public bool FatigueCausesLowSpirits = true;
             public int LowMoraleTime = 14;
             public bool LightInjuriesOn = true;
+            public bool InjuriesHurt = true;
+            public bool InjuryReductionIsPercent = true;
+            public bool CanPilotInjured = true;
             public int MaximumFatigueTime = 14;
             public bool AllowNegativeResolve = false;
-            public int pilot_wealthy_extra_fatigue = 1;
             public int MechDamageMaxDays = 5;
+            public int pilot_wealthy_extra_fatigue = 1;
+            public int pilot_athletic_FatigueDaysReduction = 1;
+            public double pilot_athletic_FatigueDaysReductionFactor = 0.5;
             public bool BEXCE = false;
         }
     }
