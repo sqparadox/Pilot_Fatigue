@@ -30,7 +30,7 @@
 		"LowMoraleTime" : 14,
 		"LightInjuriesOn" : true,
 		"InjuriesHurt" : false,
-   	    "InjuryReductionIsPercent" : true,
+   	    	"InjuryReductionIsPercent" : true,
 		"CanPilotInjured" : false,
 		"MaximumFatigueTime" : 14,
 		"MechDamageMaxDays" : 5,
