@@ -10,7 +10,6 @@ using System.Linq;
 using TMPro;
 using HBS.Collections;
 using UnityEngine;
-using BattleTech.UI.Tooltips;
 
 namespace Pilot_Fatigue
 {
@@ -193,7 +192,7 @@ BEXCE: {settings.BEXCE}";
                 Helper.Logger.LogLine($"Calculating Fatigue for {unitResult.pilot.Callsign}\n Fatigue Time({FatigueTime}) = Fatigue Time Start({FatigueTimeStart}) + Mech Damage Time({MechDamageTime}) - Pilot Guts Reduction({GutsReduction}) - Morale Modifier({MoraleModifier}) - Argo Upgrades Reduction({argoReduction})");
 
                 if (unitResult.pilot.pilotDef.PilotTags.Contains("pilot_athletic") && settings.QuirksEnabled)
-                    FatigueTime = (int)Math.Ceiling(FatigueTime/settings.pilot_athletic_FatigueDaysReductionFactor) - settings.pilot_athletic_FatigueDaysReduction;
+                    FatigueTime = (int)Math.Ceiling(FatigueTime / (settings.pilot_athletic_FatigueDaysReductionFactor / 100)) - settings.pilot_athletic_FatigueDaysReduction;
 
                 if (unitResult.pilot.pilotDef.PilotTags.Contains("PQ_pilot_green"))
                     FatigueTime -= settings.pilot_athletic_FatigueDaysReduction;
@@ -473,11 +472,12 @@ BEXCE: {settings.BEXCE}";
                 {
                     if (settings.InjuryReductionIsPercent)
                     {
-                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        double Injuries = __instance.Injuries;
+                        double Health = __instance.TotalHealth;
+                        double ReductionFactor = Injuries / Health;
                         Penalty += (int)Math.Ceiling(__result * ReductionFactor);
                         LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
                         LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
-                        Helper.Logger.LogLine(LogString);
                     }
                     else
                         Penalty += __instance.Injuries;
@@ -533,11 +533,12 @@ BEXCE: {settings.BEXCE}";
                 {
                     if (settings.InjuryReductionIsPercent)
                     {
-                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        double Injuries = __instance.Injuries;
+                        double Health = __instance.TotalHealth;
+                        double ReductionFactor = Injuries / Health;
                         Penalty += (int)Math.Ceiling(__result * ReductionFactor);
                         LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
                         LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
-                        Helper.Logger.LogLine(LogString);
                     }
                     else
                         Penalty += __instance.Injuries;
@@ -590,7 +591,6 @@ BEXCE: {settings.BEXCE}";
                     {
                         Penalty = (int)Math.Ceiling(Penalty * 1.5);
                         LogString += $"Light Injury is Penalty {Penalty}\n";
-                        Helper.Logger.LogLine(LogString);
                     }
                 }
 
@@ -598,11 +598,12 @@ BEXCE: {settings.BEXCE}";
                 {
                     if (settings.InjuryReductionIsPercent)
                     {
-                        double ReductionFactor = __instance.Injuries / __instance.TotalHealth;
+                        double Injuries = __instance.Injuries;
+                        double Health = __instance.TotalHealth;
+                        double ReductionFactor = Injuries / Health;
                         Penalty += (int)Math.Ceiling(__result * ReductionFactor);
                         LogString += $"Health is {__instance.Health} Bonus Health is {__instance.BonusHealth}\n";
                         LogString += $"Total Health is {__instance.TotalHealth} InjuryCount is {__instance.Injuries} ReductionFactor is {ReductionFactor} for Penalty of {Penalty}\n";
-                        Helper.Logger.LogLine(LogString);
                     }
                     else
                         Penalty += __instance.Injuries;
@@ -636,7 +637,7 @@ BEXCE: {settings.BEXCE}";
             }
         }
 
-    public static class Helper
+        public static class Helper
         {
             public class Logger
             {
